@@ -1,0 +1,21 @@
+
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "mongoose": "^6.0.14",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "jest": "^27.4.5",
+    "supertest": "^6.1.6"
+  }
+}
