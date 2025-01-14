@@ -73,15 +73,20 @@ app.use((err, req, res, next) => {
 });
 
 // 优雅退出函数
-const gracefulShutdown = () => {
+const gracefulShutdown = async () => {
   console.log('正在关闭服务器...');
   if (server) {
     server.close(() => {
       console.log('HTTP服务器已关闭');
-      mongoose.connection.close(false, () => {
-        console.log('MongoDB连接已关闭');
-        process.exit(0);
-      });
+      mongoose.connection.close()
+        .then(() => {
+          console.log('MongoDB连接已关闭');
+          process.exit(0);
+        })
+        .catch(err => {
+          console.error('关闭MongoDB连接时出错:', err);
+          process.exit(1);
+        });
     });
   } else {
     process.exit(0);
