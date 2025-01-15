@@ -4,10 +4,10 @@
   "description": "AI Music Platform Backend",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "node scripts/findPort.js && nodemon app.js",
+    "start": "node scripts/start.js",
+    "dev": "node scripts/start.js",
     "test": "jest",
-    "kill-port": "kill-port --port 5000,5001,5002,5003,5004,5005"
+    "clean-ports": "node scripts/portManager.js --clean"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -25,7 +25,6 @@
   },
   "devDependencies": {
     "jest": "^29.5.0",
-    "kill-port": "^2.0.1",
     "nodemon": "^2.0.22",
     "supertest": "^6.3.3"
   }
