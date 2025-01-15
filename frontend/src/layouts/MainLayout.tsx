@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Layout, Menu, Spin } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -57,9 +57,9 @@ const MainLayout = ({ children }: BaseProps) => {
         />
       </Header>
       <Content className="p-6">
-        <React.Suspense fallback={<div className="flex justify-center p-8"><Spin size="large" /></div>}>
+        <Suspense fallback={<div className="flex justify-center p-8"><Spin size="large" /></div>}>
           <Outlet />
-        </React.Suspense>
+        </Suspense>
       </Content>
     </Layout>
   );
