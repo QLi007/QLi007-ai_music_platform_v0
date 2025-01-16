@@ -1,79 +1,70 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const musicSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: [true, '音乐标题是必需的'],
-    trim: true
-  },
-  creator: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  ipfsHash: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  genre: {
-    type: String,
-    required: true
-  },
-  duration: {
-    type: Number,
-    required: true
-  },
-  plays: {
-    type: Number,
-    default: 0
-  },
-  rewards: {
-    type: Number,
-    default: 0
-  },
-  shares: {
-    type: Number,
-    default: 0
+    required: [true, 'Please provide a music title / 请提供音乐标题'],
+    trim: true,
+    maxlength: [100, 'Title cannot exceed 100 characters / 标题不能超过100个字符']
   },
   description: {
     type: String,
-    default: ''
+    trim: true,
+    maxlength: [500, 'Description cannot exceed 500 characters / 描述不能超过500个字符']
+  },
+  creator: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: [true, 'Music must have a creator / 音乐必须有创作者']
   },
   coverImage: {
     type: String,
-    default: 'default-cover.jpg'
+    default: 'default-music-cover.jpg'
+  },
+  audioFile: {
+    type: String,
+    required: [true, 'Please upload an audio file / 请上传音频文件']
+  },
+  duration: {
+    type: Number,
+    required: [true, 'Please provide music duration / 请提供音乐时长']
+  },
+  genre: {
+    type: String,
+    required: [true, 'Please select a music genre / 请选择音乐类型'],
+    enum: ['classical', 'jazz', 'rock', 'pop', 'electronic', 'other']
   },
   tags: [{
-    type: String
-  }],
-  status: {
     type: String,
-    enum: ['draft', 'published', 'private'],
-    default: 'published'
+    trim: true
+  }],
+  isPublic: {
+    type: Boolean,
+    default: true
+  },
+  stats: {
+    plays: {
+      type: Number,
+      default: 0
+    },
+    likes: {
+      type: Number,
+      default: 0
+    },
+    shares: {
+      type: Number,
+      default: 0
+    }
   }
 }, {
   timestamps: true
 });
 
-// 添加播放次数
-musicSchema.methods.addPlay = function() {
-  this.plays += 1;
-  return this.save();
-};
-
-// 添加分享次数
-musicSchema.methods.addShare = function() {
-  this.shares += 1;
-  return this.save();
-};
-
-// 添加奖励
-musicSchema.methods.addReward = function(amount) {
-  this.rewards += amount;
-  return this.save();
-};
+// 索引
+musicSchema.index({ title: 'text', description: 'text' });
+musicSchema.index({ creator: 1, createdAt: -1 });
+musicSchema.index({ genre: 1 });
 
 const Music = mongoose.model('Music', musicSchema);
 
-module.exports = Music; 
+export { Music }; 

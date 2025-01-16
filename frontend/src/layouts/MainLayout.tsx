@@ -1,68 +1,44 @@
-import React, { Suspense } from 'react';
-import { Layout, Menu, Spin } from 'antd';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import {
-  HomeOutlined,
-  UserOutlined,
-  LoginOutlined,
-  LogoutOutlined,
-} from '@ant-design/icons';
-import { BaseProps } from '../types';
+import React from 'react'
+import { Layout, Menu, Avatar, Dropdown } from 'antd'
+import { UserOutlined, LogoutOutlined } from '@ant-design/icons'
+import { Outlet, useNavigate } from 'react-router-dom'
 
-const { Header, Content } = Layout;
+const { Header, Content } = Layout
 
-const MainLayout = ({ children }: BaseProps) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isLoggedIn = false; // TODO: 从 Redux 获取登录状态
+const MainLayout: React.FC = () => {
+  const navigate = useNavigate()
 
-  const menuItems = [
-    {
-      key: '/home',
-      icon: <HomeOutlined />,
-      label: '首页',
-    },
-    {
-      key: '/profile',
-      icon: <UserOutlined />,
-      label: '个人中心',
-      disabled: !isLoggedIn,
-    },
-    {
-      key: isLoggedIn ? 'logout' : '/login',
-      icon: isLoggedIn ? <LogoutOutlined /> : <LoginOutlined />,
-      label: isLoggedIn ? '退出' : '登录',
-    },
-  ];
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    navigate('/login')
+  }
 
-  const handleMenuClick = (key: string) => {
-    if (key === 'logout') {
-      // TODO: 处理登出逻辑
-      navigate('/login');
-    } else {
-      navigate(key);
-    }
-  };
+  const menu = (
+    <Menu>
+      <Menu.Item key="profile" onClick={() => navigate('/profile')}>
+        <UserOutlined /> 个人资料
+      </Menu.Item>
+      <Menu.Item key="logout" onClick={handleLogout}>
+        <LogoutOutlined /> 退出登录
+      </Menu.Item>
+    </Menu>
+  )
 
   return (
-    <Layout>
-      <Header className="flex items-center justify-between bg-white shadow-md">
-        <div className="text-xl font-bold text-primary">AI Music Platform</div>
-        <Menu
-          mode="horizontal"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => handleMenuClick(key)}
-          className="flex-1 justify-end border-0"
-        />
+    <Layout className="min-h-screen">
+      <Header className="flex justify-between items-center bg-white px-6 shadow">
+        <div className="text-xl font-bold">AI音乐平台</div>
+        <div>
+          <Dropdown overlay={menu} placement="bottomRight">
+            <Avatar icon={<UserOutlined />} className="cursor-pointer" />
+          </Dropdown>
+        </div>
       </Header>
-      <Content className="p-6">
-        <Suspense fallback={<div className="flex justify-center p-8"><Spin size="large" /></div>}>
-          <Outlet />
-        </Suspense>
+      <Content>
+        <Outlet />
       </Content>
     </Layout>
-  );
-};
+  )
+}
 
-export default MainLayout; 
+export default MainLayout 

@@ -1,25 +1,26 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
-const config = require('./config');
-require('dotenv').config();
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
+import xss from 'xss-clean';
+import { config } from './config.js';
+import i18next from './config/i18n.js';
+import i18nextMiddleware from 'i18next-http-middleware';
+import { languageMiddleware } from './middleware/languageMiddleware.js';
 
-const authRoutes = require('./routes/authRoutes');
+import { authRouter } from './routes/authRoutes.js';
+import { profileRouter } from './routes/profileRoutes.js';
 
 // 引入模型
-require('./models/Music');
+import './models/Music.js';
 
 const app = express();
 let server;
 let isShuttingDown = false;
-let retryCount = 0;
-const MAX_RETRIES = 5;  // 最大重试次数
 
 // 安全中间件
 app.use(helmet());
@@ -39,6 +40,10 @@ app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 app.use(morgan('dev'));
 
+// 使用 i18next 中间件
+app.use(i18nextMiddleware.handle(i18next));
+app.use(languageMiddleware);
+
 // MongoDB 连接配置
 const mongooseOptions = {
   useNewUrlParser: true,
@@ -55,13 +60,15 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     message: 'OK',
     timestamp: Date.now(),
-    mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    configStatus: config.isLoaded ? 'loaded' : 'not_loaded'
   };
   res.status(200).json(healthcheck);
 });
 
 // 路由
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRouter);
+app.use('/api/profile', profileRouter);
 
 // 基础路由
 app.get('/', (req, res) => {
@@ -72,7 +79,7 @@ app.get('/', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: '请求的资源不存在'
+    message: req.t('errors.not_found')
   });
 });
 
@@ -85,128 +92,57 @@ app.use((err, req, res, next) => {
   });
 
   const errorResponse = {
-    success: false,
-    message: process.env.NODE_ENV === 'development' ? err.message : '服务器内部错误',
-    error: process.env.NODE_ENV === 'development' ? {
+    status: 'error',
+    message: config.get('env') === 'development' 
+      ? err.message 
+      : req.t('errors.server_error'),
+    error: config.get('env') === 'development' ? {
       stack: err.stack,
       details: err.details || {}
     } : undefined
   };
 
-  res.status(err.status || 500).json(errorResponse);
+  res.status(err.statusCode || 500).json(errorResponse);
 });
-
-// MongoDB 连接监听
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB 连接错误:', err);
-  if (!isShuttingDown && retryCount < MAX_RETRIES) {
-    retryCount++;
-    console.log(`MongoDB 连接重试 (${retryCount}/${MAX_RETRIES})...`);
-    setTimeout(() => {
-      if (!isShuttingDown) {
-        mongoose.connect(process.env.MONGO_URI, mongooseOptions)
-          .catch(err => console.error('重连失败:', err));
-      }
-    }, 3000);
-  } else if (retryCount >= MAX_RETRIES) {
-    console.error('达到最大重试次数，停止重连');
-    process.exit(1);
-  }
-});
-
-mongoose.connection.on('disconnected', () => {
-  if (!isShuttingDown && retryCount < MAX_RETRIES) {
-    console.log('MongoDB 连接断开');
-    retryCount++;
-    console.log(`尝试重新连接 (${retryCount}/${MAX_RETRIES})...`);
-    mongoose.connect(process.env.MONGO_URI, mongooseOptions);
-  }
-});
-
-mongoose.connection.on('connected', () => {
-  console.log('MongoDB 连接成功');
-  retryCount = 0;  // 重置重试计数
-});
-
-// 检查端口是否被占用
-const checkPort = (port) => {
-  return new Promise((resolve, reject) => {
-    const testServer = require('net').createServer()
-      .once('error', err => {
-        if (err.code === 'EADDRINUSE') {
-          console.log(`端口 ${port} 被占用，尝试下一个端口`);
-          resolve(false);
-        } else {
-          reject(err);
-        }
-      })
-      .once('listening', () => {
-        testServer.close();
-        resolve(true);
-      })
-      .listen(port);
-  });
-};
 
 // 启动服务器
-const startServer = async () => {
-  if (isShuttingDown) {
-    console.log('服务器正在关闭，取消启动');
-    return;
-  }
-
+async function startServer() {
   try {
-    // 先连接数据库
-    await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
+    // 等待配置加载完成
+    if (!config.isLoaded) {
+      console.log('等待配置加载...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // 连接数据库
+    await mongoose.connect(config.get('mongoUri'), mongooseOptions);
     console.log('MongoDB 连接成功');
 
-    let currentPort = config.port;
-    let portAvailable = false;
-    const MAX_PORT = currentPort + 10; // 最多尝试10个端口
-
-    while (!portAvailable && currentPort < MAX_PORT) {
-      console.log(`正在检查端口 ${currentPort}`);
-      portAvailable = await checkPort(currentPort);
-      
-      if (!portAvailable) {
-        currentPort++;
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒再尝试下一个端口
-      }
-    }
-
-    if (!portAvailable) {
-      throw new Error(`无法找到可用端口，已尝试端口范围: ${config.port} - ${MAX_PORT-1}`);
-    }
-
-    server = app.listen(currentPort, () => {
-      console.log(`服务器运行在端口 ${currentPort}`);
-      console.log(`健康检查: http://localhost:${currentPort}/health`);
-      console.log(`API文档: http://localhost:${currentPort}/api-docs`);
+    // 启动服务器
+    const port = config.get('port');
+    server = app.listen(port, () => {
+      console.log(`服务器运行在端口 ${port}`);
     });
 
-    // 设置服务器超时
-    server.timeout = 60000;
-    server.keepAliveTimeout = 30000;
-
-    // 添加服务器错误处理
+    // 错误处理
     server.on('error', (error) => {
       console.error('服务器错误:', error);
-      if (!isShuttingDown) {
-        gracefulShutdown();
+      if (error.code === 'EADDRINUSE') {
+        console.log(`端口 ${port} 已被占用，尝试使用其他端口...`);
+        setTimeout(() => {
+          server.close();
+          server.listen(0); // 让系统分配可用端口
+        }, 1000);
       }
     });
-
   } catch (error) {
-    console.error('启动服务器时出错:', error);
-    if (!isShuttingDown) {
-      console.log('服务器启动失败，请检查配置并重试');
-      process.exit(1);
-    }
+    console.error('服务器启动失败:', error);
+    process.exit(1);
   }
-};
+}
 
 // 优雅退出函数
-const gracefulShutdown = async () => {
+async function gracefulShutdown() {
   if (isShuttingDown) {
     console.log('已经在关闭过程中...');
     return;
@@ -214,16 +150,8 @@ const gracefulShutdown = async () => {
   
   isShuttingDown = true;
   console.log('正在准备关闭服务器...');
-  console.log('等待所有请求完成...');
-  
-  // 设置一个超时时间，防止无限等待
-  const shutdownTimeout = setTimeout(() => {
-    console.log('关闭超时，强制退出');
-    process.exit(1);
-  }, 30000); // 30秒超时
   
   try {
-    // 先关闭 HTTP 服务器
     if (server) {
       await new Promise((resolve, reject) => {
         server.close((err) => {
@@ -238,42 +166,35 @@ const gracefulShutdown = async () => {
       });
     }
     
-    // 再关闭 MongoDB 连接
     if (mongoose.connection.readyState === 1) {
       await mongoose.connection.close(false);
       console.log('MongoDB连接已关闭');
     }
     
-    // 清除超时定时器
-    clearTimeout(shutdownTimeout);
-    
-    // 等待一段时间确保端口释放
-    console.log('等待端口释放...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
     console.log('服务器已完全关闭');
     process.exit(0);
   } catch (error) {
-    console.error('服务器关闭过程中出错:', error);
-    clearTimeout(shutdownTimeout);
+    console.error('关闭过程中出错:', error);
     process.exit(1);
   }
-};
+}
 
-// 处理进程终止信号
+// 监听进程信号
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
-
-// 处理未捕获的异常和拒绝的 Promise
-process.on('uncaughtException', async (error) => {
+process.on('uncaughtException', (error) => {
   console.error('未捕获的异常:', error);
-  await gracefulShutdown();
+  gracefulShutdown();
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+  gracefulShutdown();
 });
 
-process.on('unhandledRejection', async (error) => {
-  console.error('未处理的 Promise 拒绝:', error);
-  await gracefulShutdown();
-});
+// 启动服务器
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
-// 启动应用
-startServer();
+// 导出 app 实例用于测试
+export default app;

@@ -1,7 +1,6 @@
 import React from 'react';
 import { Form, Input, Button, Card, message } from 'antd';
-import { Link, useNavigate } from 'react-router-dom';
-import { BaseProps } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 interface RegisterForm {
   username: string;
@@ -10,67 +9,78 @@ interface RegisterForm {
   confirmPassword: string;
 }
 
-const Register = ({ children }: BaseProps) => {
+const Register: React.FC = () => {
   const navigate = useNavigate();
-  const [form] = Form.useForm();
 
   const onFinish = async (values: RegisterForm) => {
     try {
-      // TODO: 实现注册逻辑
-      message.success('注册成功');
-      navigate('/login');
+      const response = await fetch('http://localhost:3000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: values.username,
+          email: values.email,
+          password: values.password,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        message.success('注册成功');
+        navigate('/login');
+      } else {
+        message.error(data.message || '注册失败');
+      }
     } catch (error) {
-      message.error('注册失败，请重试');
+      message.error('注册失败，请稍后重试');
     }
   };
 
   return (
-    <div className="flex justify-center items-center min-h-[calc(100vh-64px)]">
-      <Card className="w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center mb-8">注册</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Card title="注册" className="w-96">
         <Form
-          form={form}
           name="register"
           onFinish={onFinish}
+          autoComplete="off"
           layout="vertical"
-          requiredMark={false}
         >
           <Form.Item
-            name="username"
             label="用户名"
-            rules={[
-              { required: true, message: '请输入用户名' },
-              { min: 3, message: '用户名至少3个字符' }
-            ]}
+            name="username"
+            rules={[{ required: true, message: '请输入用户名' }]}
           >
-            <Input placeholder="请输入用户名" />
+            <Input />
           </Form.Item>
 
           <Form.Item
-            name="email"
             label="邮箱"
+            name="email"
             rules={[
               { required: true, message: '请输入邮箱' },
               { type: 'email', message: '请输入有效的邮箱地址' }
             ]}
           >
-            <Input placeholder="请输入邮箱" />
+            <Input />
           </Form.Item>
 
           <Form.Item
-            name="password"
             label="密码"
+            name="password"
             rules={[
               { required: true, message: '请输入密码' },
-              { min: 6, message: '密码至少6个字符' }
+              { min: 6, message: '密码长度不能小于6位' }
             ]}
           >
-            <Input.Password placeholder="请输入密码" />
+            <Input.Password />
           </Form.Item>
 
           <Form.Item
-            name="confirmPassword"
             label="确认密码"
+            name="confirmPassword"
             dependencies={['password']}
             rules={[
               { required: true, message: '请确认密码' },
@@ -84,21 +94,14 @@ const Register = ({ children }: BaseProps) => {
               }),
             ]}
           >
-            <Input.Password placeholder="请再次输入密码" />
+            <Input.Password />
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" className="w-full">
+            <Button type="primary" htmlType="submit" block>
               注册
             </Button>
           </Form.Item>
-
-          <div className="text-center">
-            已有账号？
-            <Link to="/login" className="text-primary hover:text-primary-dark">
-              立即登录
-            </Link>
-          </div>
         </Form>
       </Card>
     </div>

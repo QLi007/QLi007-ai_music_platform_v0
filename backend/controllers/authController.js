@@ -1,16 +1,17 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
-const config = require('../config');
+import { User } from '../models/User.js';
+import jwt from 'jsonwebtoken';
+import { AppError } from '../utils/appError.js';
+import { catchAsync } from '../utils/catchAsync.js';
 
-// 生成JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, config.jwtSecret, {
-    expiresIn: '30d'
-  });
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id },
+    process.env.JWT_SECRET || 'dev_jwt_secret_key',
+    { expiresIn: '7d' }
+  );
 };
 
-// 注册用户
-exports.register = async (req, res) => {
+export const register = catchAsync(async (req, res, next) => {
   try {
     const { username, email, password } = req.body;
 
@@ -18,122 +19,149 @@ exports.register = async (req, res) => {
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
       return res.status(400).json({
-        success: false,
-        message: '用户名或邮箱已被注册'
+        status: 'error',
+        message: 'auth.user_exists'
       });
     }
 
-    // 创建新用户
     const user = await User.create({
       username,
       email,
       password
     });
 
-    // 生成token
-    const token = generateToken(user._id);
+    // 生成 JWT
+    const token = generateToken(user);
+
+    // 移除密码字段
+    user.password = undefined;
 
     res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role
+      status: 'success',
+      data: {
+        user,
+        token
       }
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: '服务器错误',
-      error: error.message
-    });
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    next(error);
   }
-};
+});
 
-// 用户登录
-exports.login = async (req, res) => {
+export const login = catchAsync(async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
     // 检查用户是否存在
     const user = await User.findOne({ email }).select('+password');
-    if (!user) {
+    if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({
-        success: false,
-        message: '邮箱或密码错误'
+        status: 'error',
+        message: 'auth.invalid_credentials'
       });
     }
 
-    // 验证密码
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: '邮箱或密码错误'
-      });
-    }
+    // 生成 JWT
+    const token = generateToken(user);
 
-    // 更新最后登录时间
-    await user.updateLastLogin();
+    // 移除密码字段
+    user.password = undefined;
 
-    // 生成token
-    const token = generateToken(user._id);
-
-    res.status(200).json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role
+    res.json({
+      status: 'success',
+      data: {
+        user,
+        token
       }
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: '服务器错误',
-      error: error.message
+    next(error);
+  }
+});
+
+export const protect = catchAsync(async (req, res, next) => {
+  try {
+    let token;
+    if (req.headers.authorization?.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'auth.no_token'
+      });
+    }
+
+    // 验证 token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev_jwt_secret_key');
+
+    // 检查用户是否仍然存在
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'auth.user_not_found'
+      });
+    }
+
+    // 将用户信息添加到请求对象
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'auth.invalid_token'
     });
   }
-};
+});
 
-// 获取当前用户信息
-exports.getMe = async (req, res) => {
+export const logout = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id)
-      .select('-password')
-      .populate('createdMusic')
-      .populate('favorites');
-
     res.status(200).json({
       success: true,
-      data: user
+      message: req.t('auth.logout_success')
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: '服务器错误',
-      error: error.message
-    });
+    next(error);
   }
 };
 
-// 更新用户信息
-exports.updateProfile = async (req, res) => {
+export const getMe = catchAsync(async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'auth.user_not_found'
+      });
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        user
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export const updateProfile = async (req, res, next) => {
   try {
     const { username, email, avatar } = req.body;
     
-    // 检查邮箱是否被其他用户使用
     if (email) {
       const existingUser = await User.findOne({ email, _id: { $ne: req.user.id } });
       if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: '该邮箱已被使用'
-        });
+        throw new AppError(req.t('auth.email_in_use'), 400);
       }
     }
 
@@ -143,31 +171,27 @@ exports.updateProfile = async (req, res) => {
       { new: true, runValidators: true }
     ).select('-password');
 
+    if (!user) {
+      throw new AppError(req.t('errors.not_found'), 404);
+    }
+
     res.status(200).json({
       success: true,
+      message: req.t('auth.profile_update_success'),
       data: user
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: '服务器错误',
-      error: error.message
-    });
+    next(error);
   }
 };
 
-// 绑定钱包地址
-exports.bindWallet = async (req, res) => {
+export const bindWallet = async (req, res, next) => {
   try {
     const { walletAddress } = req.body;
 
-    // 检查钱包地址是否已被绑定
     const existingUser = await User.findOne({ walletAddress });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: '该钱包地址已被其他用户绑定'
-      });
+      throw new AppError(req.t('auth.wallet_already_bound'), 400);
     }
 
     const user = await User.findByIdAndUpdate(
@@ -176,15 +200,16 @@ exports.bindWallet = async (req, res) => {
       { new: true }
     ).select('-password');
 
+    if (!user) {
+      throw new AppError(req.t('errors.not_found'), 404);
+    }
+
     res.status(200).json({
       success: true,
+      message: req.t('auth.wallet_bind_success'),
       data: user
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: '服务器错误',
-      error: error.message
-    });
+    next(error);
   }
 }; 

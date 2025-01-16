@@ -1,0 +1,49 @@
+{
+  "errors": {
+    "server_error": "Internal server error occurred",
+    "not_found": "The requested resource was not found",
+    "unauthorized": "Please login to access this resource",
+    "validation_error": "Invalid input data",
+    "file_too_large": "File size exceeds the limit",
+    "unsupported_file_type": "Unsupported file type",
+    "email_exists": "User with this email already exists",
+    "user_not_found": "User not found",
+    "invalid_token": "Invalid or expired token",
+    "no_token": "No authentication token provided",
+    "email_in_use": "This email is already in use",
+    "profile_update_failed": "Failed to update profile"
+  },
+  "auth": {
+    "register_success": "Registration successful",
+    "login_success": "Login successful",
+    "logout_success": "Logout successful",
+    "invalid_credentials": "Invalid email or password",
+    "email_required": "Email is required",
+    "password_required": "Password is required",
+    "username_required": "Username is required"
+  },
+  "profile": {
+    "get_success": "Profile retrieved successfully",
+    "update_success": "Profile updated successfully",
+    "avatar_upload_success": "Avatar uploaded successfully",
+    "cover_upload_success": "Cover image uploaded successfully",
+    "preferences_update_success": "Preferences updated successfully"
+  },
+  "music": {
+    "upload_success": "Music uploaded successfully",
+    "update_success": "Music updated successfully",
+    "delete_success": "Music deleted successfully",
+    "not_found": "Music not found",
+    "no_permission": "You don't have permission to perform this action",
+    "title_required": "Music title is required",
+    "file_required": "Music file is required"
+  },
+  "common": {
+    "success": "Operation successful",
+    "failure": "Operation failed",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "deleting": "Deleting...",
+    "processing": "Processing..."
+  }
+} 
